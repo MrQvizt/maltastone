@@ -263,6 +263,25 @@ function vProduct(id){
     <div class="grid-p">${rel.map(cardHTML).join('')}</div>
   </div>`+footer();
 }
+/* last-minute suggestions at checkout: related to what's in the bag first, then bestsellers */
+function upsellList(n){
+  const inCart=new Set(cart.map(c=>c.id)), mine=cart.map(c=>P(c.id));
+  const score=p=>(mine.some(m=>m.intent==p.intent||m.stone==p.stone)?2:0)+(p.best?1:0);
+  return PRODUCTS.filter(p=>!inCart.has(p.id)&&p.price<=30)
+    .map((p,i)=>({p,i,s:score(p)})).sort((a,b)=>b.s-a.s||a.i-b.i).slice(0,n).map(x=>x.p);
+}
+function upsellHTML(){
+  const list=upsellList(4); if(!list.length) return '';
+  const left=ship=='local'?Math.max(0,FREE_SHIP-subtotal()):0;
+  return `<div class="co-up">
+    <div class="eyebrow">Before you go</div>
+    <h3>You may also like</h3>
+    ${left>0?`<p class="up-ship">Add <b>${eur(left)}</b> more for free Malta & Gozo delivery.</p>`:''}
+    ${list.map(p=>`<div class="up-item"><a href="#/p/${p.id}"><img src="${img(p.img)}" alt=""></a>
+      <div><a class="nm" href="#/p/${p.id}">${p.name}</a><small>${p.stone}</small><div class="pr">${eur(p.price)}</div></div>
+      <button onclick="addCo(${p.id})" aria-label="Add ${p.name} to order">+ Add</button></div>`).join('')}
+  </div>`;
+}
 function shipCost(){const s=subtotal();return ship=='collect'?0:ship=='intl'?12:(s>=FREE_SHIP?0:3.5)}
 function vCheckout(){
   if(!cart.length) return header()+`<div class="wrap"><div class="success"><h2>Your bag is empty</h2><p style="color:var(--muted);margin:12px 0 26px">Add a few pieces to see the checkout.</p><a class="btn btn-dark" href="#/shop/all">Browse the shop</a></div></div>`+footer();
@@ -273,7 +292,7 @@ function vCheckout(){
     <div class="steps"><a href="#/" style="color:var(--muted)">Bag</a> › <b>Details & payment</b> › Confirmation</div>
     <div class="secure" style="margin:0">${I.lock} Secure checkout</div></div></div>
   <div class="co">
-    <div class="co-main"><div class="co-inner">
+    <div class="co-main">${upsellHTML()}<div class="co-inner">
       <div class="demo-note">⚠︎ <span><b>Prototype.</b> This checkout is visual only — nothing you type is sent or stored, and no payment is taken.</span></div>
       <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:12px">Express checkout</div>
       <div class="exp-row"><button class="ap" onclick="place()"> Pay</button><button class="gp" onclick="place()">G Pay</button><button class="lk" onclick="place()">link</button></div>
@@ -312,6 +331,7 @@ function vCheckout(){
     <aside class="co-side">
       <h3 style="font-size:26px;margin-bottom:14px">Order summary</h3>
       ${cart.map(c=>{const p=P(c.id);return `<div class="sum-item"><div class="th"><img src="${img(p.img)}" alt=""><span class="q">${c.qty}</span></div><div><div class="nm">${p.name}</div><small>${p.stone}</small></div><div>${eur(p.price*c.qty)}</div></div>`}).join('')}
+      ${upsellHTML()}
       <div class="disc"><input placeholder="Gift card or discount code"><button onclick="toast('Code applied (demo)')">Apply</button></div>
       <div class="row"><span>Subtotal</span><span>${eur(s)}</span></div>
       <div class="row"><span>Delivery</span><span>${sh?eur(sh):'Free'}</span></div>
@@ -371,6 +391,15 @@ function doSearch(v){v=v.toLowerCase().trim();const r=v?PRODUCTS.filter(p=>(p.na
 function add(id,n=1,express){const c=cart.find(c=>c.id==id);c?c.qty+=n:cart.push({id,qty:n});pq=1;
   if(express){go('#/checkout');return}
   refreshBadge();openCart();}
+function addCo(id){
+  // re-rendering rebuilds the form, so carry over what the customer has typed
+  const sel='.co-inner input,.co-inner select';
+  const keep=[...document.querySelectorAll(sel)].map(e=>e.type=='checkbox'?e.checked:e.value);
+  const c=cart.find(c=>c.id==id);c?c.qty++:cart.push({id,qty:1});
+  render();
+  document.querySelectorAll(sel).forEach((e,i)=>{if(i in keep){e.type=='checkbox'?e.checked=keep[i]:e.value=keep[i]}});
+  toast('Added to your order ✦');
+}
 function qty(id,d){const c=cart.find(c=>c.id==id);c.qty+=d;if(c.qty<1)cart=cart.filter(x=>x!==c);document.getElementById('drawer').innerHTML=drawerHTML();refreshBadge()}
 function refreshBadge(){const b=document.querySelector('.hdr-right .icon-btn:last-child');if(b)b.innerHTML=I.bag+(cartCount()?`<span class="badge">${cartCount()}</span>`:'')}
 function place(){lastOrder={no:Math.floor(10000+Math.random()*89999),items:cart.map(c=>({...c})),total:subtotal()+shipCost(),ship};cart=[];go('#/success')}
